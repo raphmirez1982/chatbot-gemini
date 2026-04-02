@@ -1,0 +1,216 @@
+{
+  "entities": {
+    "users": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
+    "tasks": {
+      "title": "Task",
+      "description": "Daily task with status and subtasks",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "projectId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "in-progress", "completed"] },
+        "category": { "type": "string" },
+        "dueDate": { "type": "string", "format": "date-time" },
+        "subtasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": { "type": "string" },
+              "completed": { "type": "boolean" }
+            }
+          }
+        }
+      },
+      "required": ["userId", "title", "status"]
+    },
+    "notes": {
+      "title": "Note",
+      "description": "Personal note with list details",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "projectId": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "category": { "type": "string" },
+        "details": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "images": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title"]
+    },
+    "projects": {
+      "title": "Project",
+      "description": "Project container for tasks and notes",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "color": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "icon": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "archived", "completed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "status"]
+    },
+    "reminders": {
+      "title": "Reminder",
+      "description": "Reminder with list details and due date",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "dueDate": { "type": "string", "format": "date-time" },
+        "details": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["userId", "title", "dueDate"]
+    },
+    "ai_stats": {
+      "title": "AI Usage Stats",
+      "description": "Tracking AI feature usage",
+      "type": "object",
+      "properties": {
+        "tts_calls": { "type": "number" },
+        "tts_chars": { "type": "number" },
+        "refine_calls": { "type": "number" },
+        "refine_chars": { "type": "number" },
+        "lastUsed": { "type": "string", "format": "date-time" }
+      }
+    },
+    "subscriptions": {
+      "title": "Push Subscription",
+      "description": "Web Push subscription for a user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "subscription": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "subscription"]
+    },
+    "budgets": {
+      "title": "Budget Category",
+      "description": "Monthly budget category with concepts and expenses",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "ownerEmail": { "type": "string" },
+        "sharedWith": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "period": { "type": "string", "description": "YYYY-MM format" },
+        "title": { "type": "string" },
+        "limit": { "type": "number" },
+        "spent": { "type": "number" },
+        "currency": { "type": "string" },
+        "color": { "type": "string" },
+        "concepts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "limit": { "type": "number" },
+              "spent": { "type": "number" },
+              "expenses": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "concept": { "type": "string" },
+                    "amount": { "type": "number" },
+                    "date": { "type": "string", "format": "date-time" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "period", "title", "limit"]
+    },
+    "notifications": {
+      "title": "Notification",
+      "description": "In-app message for budget activity",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Recipient UID or Email" },
+        "message": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "read": { "type": "boolean" },
+        "type": { "type": "string", "enum": ["payment", "budget", "system"] },
+        "budgetId": { "type": "string" }
+      },
+      "required": ["userId", "message", "date", "read", "type"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "users",
+      "description": "User profile document"
+    },
+    "tasks/{taskId}": {
+      "schema": "tasks",
+      "description": "User tasks"
+    },
+    "notes/{noteId}": {
+      "schema": "notes",
+      "description": "User notes"
+    },
+    "reminders/{reminderId}": {
+      "schema": "reminders",
+      "description": "User reminders"
+    },
+    "projects/{projectId}": {
+      "schema": "projects",
+      "description": "User projects"
+    },
+    "users/{userId}/stats/ai": {
+      "schema": "ai_stats",
+      "description": "User AI usage metrics"
+    },
+    "subscriptions/{subId}": {
+      "schema": "subscriptions",
+      "description": "User push subscriptions"
+    },
+    "budgets/{budgetId}": {
+      "schema": "budgets",
+      "description": "User monthly budget categories"
+    },
+    "notifications/{notificationId}": {
+      "schema": "notifications",
+      "description": "User notifications"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+# Ignorar dependencias pesadas
+node_modules/
+dist/
+
+# ¡SÚPER IMPORTANTE! Ignorar llaves secretas
+.env
+*.env
+**/.env
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db

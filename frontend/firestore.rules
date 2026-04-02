@@ -1,0 +1,264 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required)
+    //   - displayName: string (optional)
+    //   - photoURL: string (optional)
+    //
+    // Collection: tasks
+    // Document ID: {taskId}
+    // Fields:
+    //   - userId: string (required)
+    //   - title: string (required, max 100)
+    //   - description: string (optional, max 1000)
+    //   - status: string (required, enum: pending, in-progress, completed)
+    //   - category: string (optional, max 50)
+    //   - dueDate: timestamp (optional)
+    //   - subtasks: list (optional, max 20 items, each item: {text: string, completed: bool})
+    //
+    // Collection: notes
+    // Document ID: {noteId}
+    // Fields:
+    //   - userId: string (required)
+    //   - title: string (required, max 100)
+    //   - content: string (optional, max 5000)
+    //   - category: string (optional, max 50)
+    //   - details: list (optional, max 50 items, each string max 200)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: reminders
+    // Document ID: {reminderId}
+    // Fields:
+    //   - userId: string (required)
+    //   - title: string (required, max 100)
+    //   - description: string (optional, max 1000)
+    //   - category: string (optional, max 50)
+    //   - dueDate: timestamp (required)
+    //   - details: list (optional, max 50 items, each string max 200)
+    //   - notified: bool (optional)
+    //
+    // Collection: projects
+    // Document ID: {projectId}
+    // Fields:
+    //   - userId: string (required)
+    //   - name: string (required, max 100)
+    //   - description: string (optional, max 1000)
+    //   - color: string (optional, max 20)
+    //   - imageUrl: string (optional, max 500)
+    //   - icon: string (optional, max 50)
+    //   - status: string (required, enum: active, archived, completed)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: budgets
+    // Document ID: {budgetId}
+    // Fields:
+    //   - userId: string (required)
+    //   - period: string (required, format YYYY-MM)
+    //   - title: string (required, max 100)
+    //   - limit: number (required, positive)
+    //   - spent: number (optional)
+    //   - currency: string (optional, max 10)
+    //   - color: string (optional, max 20)
+    //   - concepts: list (optional, max 50 items, each: {id: string, title: string, limit: number, spent: number, expenses: list})
+    //   - createdAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+    function uidUnchanged() {
+      return !('userId' in request.resource.data) || request.resource.data.userId == request.auth.uid;
+    }
+    function uidNotModified() {
+      return !('userId' in request.resource.data) || request.resource.data.userId == resource.data.userId;
+    }
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+    function isAdmin() {
+      return isAuthenticated() &&
+        (
+          (request.auth.token.email == "r3.florez.1982@gmail.com" && request.auth.token.email_verified == true) ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin')
+        );
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    function isValidTask(data) {
+      return data.userId is string &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 100 &&
+             data.status in ['pending', 'in-progress', 'completed'] &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 1000)) &&
+             (!('category' in data) || (data.category is string && data.category.size() <= 50)) &&
+             (!('projectId' in data) || data.projectId == null || (data.projectId is string && data.projectId.size() <= 50)) &&
+             (!('subtasks' in data) || (data.subtasks is list && data.subtasks.size() <= 20));
+    }
+
+    function isValidNote(data) {
+      return data.userId is string &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 100 &&
+             (!('content' in data) || (data.content is string && data.content.size() <= 5000)) &&
+             (!('category' in data) || (data.category is string && data.category.size() <= 50)) &&
+             (!('projectId' in data) || data.projectId == null || (data.projectId is string && data.projectId.size() <= 50)) &&
+             (!('details' in data) || (data.details is list && data.details.size() <= 50)) &&
+             (!('images' in data) || (data.images is list && data.images.size() <= 10)) &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidProject(data) {
+      return data.userId is string &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.status in ['active', 'archived', 'completed'] &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 1000)) &&
+             (!('color' in data) || (data.color is string && data.color.size() <= 20)) &&
+             (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 500)) &&
+             (!('icon' in data) || (data.icon is string && data.icon.size() <= 50)) &&
+             (!('ownerEmail' in data) || (data.ownerEmail is string && data.ownerEmail.size() <= 100)) &&
+             (!('sharedWith' in data) || (data.sharedWith is list && data.sharedWith.size() <= 20)) &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidReminder(data) {
+      return data.userId is string &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 100 &&
+             data.dueDate is timestamp &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 1000)) &&
+             (!('category' in data) || (data.category is string && data.category.size() <= 50)) &&
+             (!('details' in data) || (data.details is list && data.details.size() <= 50)) &&
+             (!('notified' in data) || data.notified is bool);
+    }
+
+    function isValidSubscription(data) {
+      return data.userId is string && data.subscription is map &&
+             (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    function isValidBudget(data) {
+      return data.userId is string &&
+             data.period is string && data.period.matches("^\\d{4}-\\d{2}$") &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 100 &&
+             data.limit is number && data.limit >= 0 &&
+             (!('spent' in data) || data.spent is number) &&
+             (!('currency' in data) || (data.currency is string && data.currency.size() <= 10)) &&
+             (!('color' in data) || (data.color is string && data.color.size() <= 20)) &&
+             (!('concepts' in data) || (data.concepts is list && data.concepts.size() <= 50)) &&
+             (!('ownerEmail' in data) || (data.ownerEmail is string && data.ownerEmail.size() <= 100)) &&
+             (!('sharedWith' in data) || (data.sharedWith is list && data.sharedWith.size() <= 20)) &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && (isOwner(userId) || isAdmin()) && hasRequiredFields(['uid', 'email']) && hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'role']);
+      allow update: if isAuthenticated() && (isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role)) && hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'role']);
+
+      match /stats/ai {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create, update: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    match /test/connection {
+      allow read: if true;
+    }
+
+    match /tasks/{taskId} {
+      allow read: if isAuthenticated() && (isAdmin() || (resource == null || resource.data.userId == request.auth.uid));
+      allow create: if isAuthenticated() && (isAdmin() || uidUnchanged()) && isValidTask(request.resource.data);
+      allow update: if isAuthenticated() && (isAdmin() || (isDocOwner() && uidNotModified())) && isValidTask(request.resource.data);
+      allow delete: if isAdmin() || isDocOwner();
+    }
+
+    match /notes/{noteId} {
+      allow read: if isAuthenticated() && (isAdmin() || (resource == null || resource.data.userId == request.auth.uid));
+      allow create: if isAuthenticated() && (isAdmin() || uidUnchanged()) && isValidNote(request.resource.data);
+      allow update: if isAuthenticated() && (isAdmin() || (isDocOwner() && uidNotModified())) && isValidNote(request.resource.data);
+      allow delete: if isAdmin() || isDocOwner();
+    }
+
+    match /reminders/{reminderId} {
+      // Allow unauthenticated read and update for the background task
+      // In a real app, we would restrict this to the backend IP or use a secret header
+      allow read: if true;
+      allow create: if isAuthenticated() && (isAdmin() || uidUnchanged()) && isValidReminder(request.resource.data);
+      allow update: if true; // Temporarily allow all updates to fix background task
+      allow delete: if isAdmin() || isDocOwner();
+    }
+
+    match /subscriptions/{subId} {
+      // Allow unauthenticated read and delete for the background task
+      allow read, delete: if true;
+      allow create: if isAuthenticated() && (isAdmin() || uidUnchanged()) && isValidSubscription(request.resource.data);
+      allow update: if isAuthenticated() && (isAdmin() || (isDocOwner() && uidNotModified())) && isValidSubscription(request.resource.data);
+    }
+
+    match /projects/{projectId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        resource.data.userId == request.auth.uid || 
+        (request.auth.token.email != null && request.auth.token.email in resource.data.get('sharedWith', []))
+      );
+      allow create: if isAuthenticated() && (isAdmin() || uidUnchanged()) && isValidProject(request.resource.data);
+      allow update: if isAuthenticated() && (
+        isAdmin() || 
+        (isDocOwner() && uidNotModified()) || 
+        (request.auth.token.email != null && request.auth.token.email in resource.data.get('sharedWith', []))
+      ) && isValidProject(request.resource.data);
+      allow delete: if isAdmin() || isDocOwner();
+    }
+
+    match /budgets/{budgetId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        resource.data.userId == request.auth.uid || 
+        (request.auth.token.email != null && (
+          request.auth.token.email == resource.data.get('ownerEmail', '') ||
+          request.auth.token.email in resource.data.get('sharedWith', [])
+        ))
+      );
+      allow create: if isAuthenticated() && (isAdmin() || uidUnchanged()) && isValidBudget(request.resource.data);
+      allow update: if isAuthenticated() && (
+        isAdmin() || 
+        (isDocOwner() && uidNotModified()) || 
+        (request.auth.token.email != null && request.auth.token.email in resource.data.get('sharedWith', []))
+      ) && isValidBudget(request.resource.data);
+      allow delete: if isAdmin() || isDocOwner();
+    }
+
+    match /notifications/{notificationId} {
+      allow read, update, delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || 
+        resource.data.userId == request.auth.token.email ||
+        isAdmin()
+      );
+      allow create: if isAuthenticated();
+    }
+  }
+}

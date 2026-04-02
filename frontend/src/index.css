@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+@theme {
+  --breakpoint-xs: 400px;
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+@layer base {
+  .markdown-body {
+    @apply text-inherit;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+  }
+  .markdown-body h1 {
+    @apply text-2xl font-bold mb-4 mt-6;
+  }
+  .markdown-body h2 {
+    @apply text-xl font-bold mb-3 mt-5;
+  }
+  .markdown-body h3 {
+    @apply text-lg font-bold mb-2 mt-4;
+  }
+  .markdown-body p {
+    @apply mb-4 leading-relaxed;
+  }
+  .markdown-body ul {
+    @apply list-disc list-inside mb-4 space-y-1;
+  }
+  .markdown-body ol {
+    @apply list-decimal list-inside mb-4 space-y-1;
+  }
+  .markdown-body li {
+    @apply ml-4;
+  }
+  .markdown-body strong {
+    @apply font-bold;
+  }
+  .markdown-body em {
+    @apply italic;
+  }
+  .markdown-body code {
+    @apply bg-neutral-100 px-1 py-0.5 rounded font-mono text-sm;
+  }
+  .markdown-body pre {
+    @apply bg-neutral-100 p-4 rounded-xl overflow-x-auto mb-4;
+  }
+  .markdown-body blockquote {
+    @apply border-l-4 border-neutral-200 pl-4 italic mb-4;
+  }
+}
