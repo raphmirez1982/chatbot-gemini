@@ -132,39 +132,31 @@ import { GoogleGenAI } from "@google/genai";
 // --- AI Proxy Helper ---
 const getLocalAIKey = () => localStorage.getItem('GEMINI_API_KEY') || localStorage.getItem('MY_GEMINI_API_KEY') || undefined;
 
+// --- Configuración de Entorno ---
+const getBackendUrl = () => {
+  if (import.meta.env.VITE_BACKEND_URL) {
+    return import.meta.env.VITE_BACKEND_URL;
+  }
+  if (import.meta.env.DEV) {
+    return 'http://localhost:3000';
+  }
+  return 'https://chatbot-gemini.onrender.com';
+};
+const BASE_URL = getBackendUrl();
+
 const generateAIContent = async (prompt: string, config?: any, systemInstruction?: string, apiKey?: string) => {
   const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  
-  // --- CASO 1: LOCALHOST (Tu server.js) ---
-  if (isLocal) {
-    try {
-      const response = await fetch('http://localhost:3000/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          prompt, 
-          config, 
-          systemInstruction,
-          apiKey: apiKey || getLocalAIKey() 
-        })
-      });
-      
-      if (!response.ok) throw new Error(`Error del servidor local: ${response.status}`);
-      
-      const data = await response.json();
-      // Normalizamos: si tu server devuelve 'respuesta', lo ponemos en 'text'
-      const normalizedText = data.text || data.respuesta || "";
-      return { ...data, text: normalizedText };
-    } catch (err) {
-      console.error("Error en localhost:", err);
-      throw new Error("No se pudo conectar con tu servidor local en el puerto 3000.");
-    }
-  }
-
-  // --- CASO 2: NUBE (Preview / Standalone Tab) ---
+  const hasBackendUrl = !!import.meta.env.VITE_BACKEND_URL;
   const sdkKey = apiKey || getLocalAIKey() || (import.meta.env.VITE_GEMINI_API_KEY) || "";
-  
-  if (sdkKey) {
+
+  // --- MODO DIRECTO (SDK de Google) ---
+  // Se activa automáticamente si no estamos en localhost y no hay VITE_BACKEND_URL (Entorno AI Studio)
+  const isAIStudioMode = !isLocal && !hasBackendUrl;
+
+  if (isAIStudioMode || (sdkKey && !hasBackendUrl)) {
+    if (!sdkKey) {
+      throw new Error("No se encontró una API Key para el modo directo de AI Studio.");
+    }
     try {
       const ai = new GoogleGenAI({ apiKey: sdkKey });
       const response = await ai.models.generateContent({
@@ -175,23 +167,50 @@ const generateAIContent = async (prompt: string, config?: any, systemInstruction
           systemInstruction: systemInstruction || "Eres TaskMaster AI."
         }
       });
-      // El SDK devuelve un objeto con .text, lo devolvemos tal cual
       return response;
     } catch (e) {
-      console.warn("SDK falló, intentando proxy de la nube...");
+      console.error("Error en modo directo SDK:", e);
+      if (isAIStudioMode) throw e;
     }
   }
 
-  // Fallback final: Proxy de la nube
-  const cloudResponse = await fetch('/api/ai/generate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, config, systemInstruction, apiKey: sdkKey })
-  });
-  
-  const cloudData = await cloudResponse.json();
-  const cloudText = cloudData.text || cloudData.respuesta || "";
-  return { ...cloudData, text: cloudText };
+  // --- MODO BACKEND (Render / Local) ---
+  try {
+    const response = await fetch(`${BASE_URL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        prompt, 
+        config, 
+        systemInstruction,
+        apiKey: sdkKey 
+      })
+    });
+    
+    if (!response.ok) throw new Error(`Error del servidor: ${response.status}`);
+    
+    const data = await response.json();
+    // Normalizamos: aceptamos 'text' o 'respuesta' (compatibilidad con server.js local)
+    const normalizedText = data.text || data.respuesta || "";
+    return { ...data, text: normalizedText };
+  } catch (err) {
+    console.error("Error de conexión con el Backend:", err);
+    // Si falla el backend en producción pero tenemos clave, intentamos SDK como último recurso
+    if (!isLocal && sdkKey) {
+      try {
+        const ai = new GoogleGenAI({ apiKey: sdkKey });
+        const response = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: [{ parts: [{ text: prompt }] }],
+          config: { ...config, systemInstruction: systemInstruction || "Eres TaskMaster AI." }
+        });
+        return response;
+      } catch (sdkErr) {
+        throw new Error("Error de conexión con el servidor y el SDK falló.");
+      }
+    }
+    throw new Error(`No se pudo conectar con el servidor en ${BASE_URL || 'la nube'}.`);
+  }
 };
 
 // Utility for tailwind classes
